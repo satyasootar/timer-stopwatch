@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback, UIEvent } from 'react';
+import { useEffect, useState, useRef, useCallback, type UIEvent } from 'react';
 
 const WheelPicker = ({ 
   max, 

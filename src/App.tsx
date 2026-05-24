@@ -14,23 +14,44 @@ const WheelPicker = ({
   disabled?: boolean 
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const isProgrammatic = useRef(false);
+  const scrollTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastReportedValue = useRef(value);
   const ITEM_HEIGHT = 60;
 
   useEffect(() => {
-    if (containerRef.current) {
-      containerRef.current.scrollTo({
-        top: value * ITEM_HEIGHT,
-        behavior: 'smooth'
-      });
-    }
+    if (!containerRef.current) return;
+    
+    // If the value update was caused by the user's manual scroll, don't interrupt it!
+    // We let native CSS scroll-snapping take the wheel smoothly.
+    if (value === lastReportedValue.current) return;
+
+    // Otherwise, this is an external change (Reset button, Timer ticking).
+    // We update our ref and force a programmatic smooth scroll.
+    lastReportedValue.current = value;
+    const targetScroll = value * ITEM_HEIGHT;
+    
+    isProgrammatic.current = true;
+    containerRef.current.scrollTo({
+      top: targetScroll,
+      behavior: 'smooth'
+    });
+    
+    if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
+    // Wait for the smooth scroll to finish before removing the programmatic lock
+    scrollTimeout.current = setTimeout(() => {
+      isProgrammatic.current = false;
+    }, 500);
   }, [value]);
 
   const handleScroll = useCallback((e: UIEvent<HTMLDivElement>) => {
-    if (disabled || !onChange) return;
+    if (disabled || !onChange || isProgrammatic.current) return;
     const scrollY = e.currentTarget.scrollTop;
     const index = Math.round(scrollY / ITEM_HEIGHT);
     const safeIndex = Math.max(0, Math.min(index, max));
+    
     if (safeIndex !== value) {
+      lastReportedValue.current = safeIndex; 
       onChange(safeIndex);
     }
   }, [value, max, disabled, onChange]);
@@ -69,9 +90,14 @@ export const App = () => {
   const timerS = timerTotalSeconds % 60;
 
   const updateTimer = (type: 'h'|'m'|'s', val: number) => {
-    if (type === 'h') setTimerTotalSeconds(val * 3600 + timerM * 60 + timerS);
-    if (type === 'm') setTimerTotalSeconds(timerH * 3600 + val * 60 + timerS);
-    if (type === 's') setTimerTotalSeconds(timerH * 3600 + timerM * 60 + val);
+    setTimerTotalSeconds(prev => {
+      const h = Math.floor(prev / 3600);
+      const m = Math.floor((prev % 3600) / 60);
+      const s = prev % 60;
+      if (type === 'h') return val * 3600 + m * 60 + s;
+      if (type === 'm') return h * 3600 + val * 60 + s;
+      return h * 3600 + m * 60 + val;
+    });
   };
 
   const [stopwatchTotalSeconds, setStopwatchTotalSeconds] = useState(0);
